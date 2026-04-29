@@ -1,0 +1,158 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+:root {
+  --bg-primary: #ffffff;
+  --bg-secondary: #fafafa;
+  --text-main: #09090b;
+  --text-muted: #71717a;
+  --border-subtle: #e4e4e7;
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --gradient-primary: linear-gradient(135deg, #2563eb, #1e40af);
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -4px rgba(0, 0, 0, 0.05);
+}
+
+
+body {
+  margin: 0;
+  background-color: var(--bg-primary);
+  font-family: 'Inter', sans-serif;
+  color: var(--text-main);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Subtle background mesh */
+body::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  height: 700px;
+  background: radial-gradient(circle at 50% -20%, rgba(37, 99, 235, 0.06), transparent 70%);
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* Typography refinements */
+h1, h2, h3, .brand-font, div[style*="fontFamily: 'Playfair Display'"], div[style*="fontFamily:'Playfair Display'"] {
+  font-family: 'Inter', sans-serif !important;
+  letter-spacing: -0.04em !important;
+  color: var(--text-main) !important;
+}
+
+h1 {
+  font-weight: 700 !important;
+}
+
+h2 {
+  font-weight: 600 !important;
+}
+
+p {
+  color: var(--text-muted) !important;
+}
+
+/* Ticker tape subtle styling */
+.tick-tape-container {
+  background: var(--bg-secondary) !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
+}
+
+/* Alternating sections very subtle */
+section[style*="background: #f8f9fc"], 
+section[style*="background:#f8f9fc"], 
+div[style*="background: #f8f9fc"],
+div[style*="background:#f8f9fc"] {
+  background: #fafafa !important;
+  border-top: 1px solid var(--border-subtle) !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
+}
+
+/* Ultra-clean cards */
+.step-card, .feat-card, .plan-card {
+  background: #ffffff !important;
+  border: 1px solid var(--border-subtle) !important;
+  box-shadow: var(--shadow-sm) !important;
+  border-radius: 12px !important;
+  transition: all 0.2s ease !important;
+}
+
+.step-card:hover, .feat-card:hover, .plan-card:hover {
+  box-shadow: var(--shadow-md) !important;
+  transform: translateY(-2px) !important;
+  border-color: #d4d4d8 !important;
+}
+
+/* Hero card - clean macOS window look */
+.hero-card {
+  background: #ffffff !important;
+  border: 1px solid var(--border-subtle) !important;
+  box-shadow: 0 20px 40px -10px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.02) !important;
+  border-radius: 12px !important;
+  overflow: hidden;
+}
+
+/* AI Demo Interface */
+.ai-demo-box {
+  background: #ffffff !important;
+  border: 1px solid var(--border-subtle) !important;
+  box-shadow: var(--shadow-md) !important;
+  border-radius: 12px !important;
+}
+
+/* Clean buttons */
+.primary-btn {
+  background: var(--gradient-primary) !important;
+  color: #fff !important;
+  box-shadow: 0 1px 2px rgba(37,99,235,0.2), inset 0 1px 0 rgba(255,255,255,0.15) !important;
+  border: 1px solid transparent !important;
+  transition: all 0.15s ease !important;
+  border-radius: 8px !important;
+}
+
+.primary-btn:hover {
+  background: var(--primary-hover) !important;
+  box-shadow: 0 4px 6px -1px rgba(37,99,235,0.2), 0 2px 4px -2px rgba(37,99,235,0.2) !important;
+  transform: none !important;
+}
+
+/* Secondary / Ghost buttons */
+.nav-link {
+  color: var(--text-muted) !important;
+}
+.nav-link:hover {
+  color: var(--text-main) !important;
+  background: #f4f4f5 !important;
+}
+
+/* Override 'AI' pill and small tags */
+div[style*="background: #f1f5f9"], div[style*="background:#f1f5f9"] {
+  background: #f4f4f5 !important;
+  color: #52525b !important;
+  border: 1px solid var(--border-subtle) !important;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+}
+
+/* Italic highlights to be clean not gradient */
+em {
+  color: var(--text-main) !important;
+  font-style: normal !important;
+  box-shadow: inset 0 -8px 0 0 rgba(37,99,235,0.2);
+}
+
+/* JetBrains Mono overrides */
+div[style*="'DM Mono'"], span[style*="'DM Mono'"] {
+  font-family: 'JetBrains Mono', monospace !important;
+  letter-spacing: -0.02em;
+}
+
+/* Pill tags */
+.pill-tag {
+  background: #f4f4f5 !important;
+  border: 1px solid #e4e4e7 !important;
+  color: #52525b !important;
+  font-weight: 500 !important;
+  border-radius: 9999px !important;
+}
