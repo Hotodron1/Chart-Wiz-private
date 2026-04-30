@@ -3012,6 +3012,340 @@ function MarketBar({T=LIGHT}){
   );
 }
 
+// ─── BACKTEST PAGE ────────────────────────────────────────────────────────────
+function BtLabel({T,children}){
+  return <div style={{fontSize:10,fontWeight:600,color:T.textMuted,marginBottom:4,letterSpacing:"0.04em",textTransform:"uppercase"}}>{children}</div>;
+}
+
+function BacktestPage({T,dark,isPremium=false}){
+  const [ticker,setTicker]=useState("SPY");
+  const [tf,setTf]=useState("1Y");
+  const [strategy,setStrategy]=useState("ema_cross");
+  const [capital,setCapital]=useState(10000);
+  const [posSize,setPosSize]=useState(100);
+  const [commission,setCommission]=useState(0);
+  const [running,setRunning]=useState(false);
+  const [result,setResult]=useState(null);
+  const [error,setError]=useState("");
+  const [emFast,setEmFast]=useState(9);
+  const [emSlow,setEmSlow]=useState(21);
+  const [rsiOB,setRsiOB]=useState(70);
+  const [rsiOS,setRsiOS]=useState(30);
+
+  const STRATEGIES=[
+    {id:"ema_cross",    label:"EMA Crossover"},
+    {id:"rsi_mean_rev", label:"RSI Mean Reversion"},
+    {id:"macd_cross",   label:"MACD Signal Cross"},
+    {id:"supertrend",   label:"Supertrend"},
+    {id:"bb_breakout",  label:"BB Breakout"},
+  ];
+  const TFS=["6M","1Y","2Y","5Y","MAX"];
+
+  function runBacktest(bars){
+    const n=bars.length;
+    if(n<50)return null;
+    const rsi=calcRSI(bars,14);
+    const emaFastArr=calcEMA(bars,emFast);
+    const emaSlowArr=calcEMA(bars,emSlow);
+    const {macd,signal}=calcMACD(bars);
+    const bb=calcBB(bars,20,2);
+    const st=calcSupertrend(bars,10,3);
+
+    let inTrade=false,entryPrice=0,entryIdx=0;
+    const trades=[];
+    let equity=capital;
+    const equityCurve=[{i:0,val:capital,date:bars[0].time}];
+
+    for(let i=1;i<n;i++){
+      const c=bars[i];
+      let buySignal=false,sellSignal=false;
+
+      if(strategy==="ema_cross"){
+        const fa=emaFastArr[i],fb=emaFastArr[i-1],sa=emaSlowArr[i],sb=emaSlowArr[i-1];
+        if(fa!=null&&sa!=null&&fb!=null&&sb!=null){
+          buySignal=fb<=sb&&fa>sa;
+          sellSignal=fb>=sb&&fa<sa;
+        }
+      } else if(strategy==="rsi_mean_rev"){
+        if(rsi[i]!=null&&rsi[i-1]!=null){
+          buySignal=rsi[i-1]<rsiOS&&rsi[i]>=rsiOS;
+          sellSignal=rsi[i-1]<rsiOB&&rsi[i]>=rsiOB;
+        }
+      } else if(strategy==="macd_cross"){
+        if(macd[i]!=null&&signal[i]!=null&&macd[i-1]!=null&&signal[i-1]!=null){
+          buySignal=macd[i-1]<=signal[i-1]&&macd[i]>signal[i];
+          sellSignal=macd[i-1]>=signal[i-1]&&macd[i]<signal[i];
+        }
+      } else if(strategy==="supertrend"){
+        if(st[i]?.dir!=null&&st[i-1]?.dir!=null){
+          buySignal=st[i-1].dir===-1&&st[i].dir===1;
+          sellSignal=st[i-1].dir===1&&st[i].dir===-1;
+        }
+      } else if(strategy==="bb_breakout"){
+        if(bb[i]&&bb[i-1]){
+          buySignal=bars[i-1].close<=bb[i-1].upper&&c.close>bb[i].upper;
+          sellSignal=bars[i-1].close>=bb[i-1].lower&&c.close<bb[i].lower;
+        }
+      }
+
+      if(!inTrade&&buySignal){
+        inTrade=true;entryPrice=c.close;entryIdx=i;
+      } else if(inTrade&&(sellSignal||(i===n-1))){
+        const exitPrice=c.close;
+        const posVal=equity*(posSize/100);
+        const shares=posVal/entryPrice;
+        const net=shares*(exitPrice-entryPrice)-commission*2;
+        equity+=net;
+        trades.push({entry:entryPrice,exit:exitPrice,entryDate:bars[entryIdx].time,exitDate:c.time,pnl:net,pct:(exitPrice-entryPrice)/entryPrice*100,win:net>0});
+        inTrade=false;
+        equityCurve.push({i,val:equity,date:c.time});
+      } else {
+        const curVal=inTrade?equity+(equity*(posSize/100)/entryPrice)*(c.close-entryPrice):equity;
+        equityCurve.push({i,val:curVal,date:c.time});
+      }
+    }
+
+    const wins=trades.filter(t=>t.win);
+    const losses=trades.filter(t=>!t.win);
+    const winRate=trades.length?wins.length/trades.length*100:0;
+    const avgWin=wins.length?wins.reduce((s,t)=>s+t.pct,0)/wins.length:0;
+    const avgLoss=losses.length?losses.reduce((s,t)=>s+t.pct,0)/losses.length:0;
+    const grossWin=wins.reduce((s,t)=>s+t.pnl,0);
+    const grossLoss=Math.abs(losses.reduce((s,t)=>s+t.pnl,0));
+    const profitFactor=grossLoss>0?grossWin/grossLoss:grossWin>0?Infinity:0;
+    const totalReturn=(equity-capital)/capital*100;
+
+    let peak=capital,maxDD=0;
+    for(const pt of equityCurve){if(pt.val>peak)peak=pt.val;const dd=(peak-pt.val)/peak*100;if(dd>maxDD)maxDD=dd;}
+
+    const dailyRets=equityCurve.slice(1).map((pt,i)=>(pt.val-equityCurve[i].val)/equityCurve[i].val);
+    const meanRet=dailyRets.reduce((s,v)=>s+v,0)/(dailyRets.length||1);
+    const stdRet=Math.sqrt(dailyRets.reduce((s,v)=>s+(v-meanRet)**2,0)/(dailyRets.length||1))||0.0001;
+    const sharpe=(meanRet/stdRet)*Math.sqrt(252);
+    const bnh=(bars[n-1].close-bars[0].close)/bars[0].close*100;
+
+    return{totalReturn,winRate,avgWin,avgLoss,profitFactor,maxDD,sharpe,trades,equityCurve,equity,bnh};
+  }
+
+  const handleRun=async()=>{
+    const tk=ticker.toUpperCase().trim();
+    if(!tk){setError("Enter a ticker symbol");return;}
+    setRunning(true);setError("");setResult(null);
+    try{
+      let bars;
+      if(inElectron()){
+        const yTf=tf==="2Y"?"1Y":tf;
+        const res=await window.chartWizAPI.fetchChart(tk,yTf);
+        if(!res.ok)throw new Error(res.error||"Fetch failed");
+        bars=res.bars;
+      } else {
+        const bp=(SCAN_UNIVERSE[tk]?.price||STOCKS[tk]?.price||100);
+        bars=genCandles(bp,252,"1D");
+      }
+      if(!bars||bars.length<30)throw new Error("Not enough historical data");
+      const r=runBacktest(bars);
+      if(!r)throw new Error("Insufficient bars for this strategy");
+      setResult(r);
+    }catch(e){setError(e.message);}
+    setRunning(false);
+  };
+
+  const EquityCurve=({curve})=>{
+    if(!curve?.length)return null;
+    const W=600,H=130;
+    const vals=curve.map(p=>p.val);
+    const mn=Math.min(...vals),mx=Math.max(...vals),range=mx-mn||1;
+    const toX=i=>(i/(curve.length-1||1))*W;
+    const toY=v=>H-4-((v-mn)/range)*(H-8);
+    const pts=curve.map((p,i)=>`${toX(i).toFixed(1)},${toY(p.val).toFixed(1)}`).join(" ");
+    const isUp=vals[vals.length-1]>=vals[0];
+    const col=isUp?T.pos:T.neg;
+    const fillPath=`M${toX(0).toFixed(1)},${toY(curve[0].val).toFixed(1)} ${curve.map((p,i)=>`L${toX(i).toFixed(1)},${toY(p.val).toFixed(1)}`).join(" ")} L${toX(curve.length-1).toFixed(1)},${H} L${toX(0).toFixed(1)},${H} Z`;
+    return(
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{display:"block"}}>
+        <defs><linearGradient id="btec" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={col} stopOpacity="0.2"/><stop offset="100%" stopColor={col} stopOpacity="0.01"/></linearGradient></defs>
+        <path d={fillPath} fill="url(#btec)" stroke="none"/>
+        <polyline points={pts} fill="none" stroke={col} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    );
+  };
+
+  const fmt=(n,d=2)=>n==null?"—":isFinite(n)?n.toFixed(d):"∞";
+  const fmtPct=(n,sign=false)=>n==null?"—":`${sign&&n>0?"+":""}${n.toFixed(2)}%`;
+  const fmtCur=(n)=>n==null?"—":`$${(+n).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+  const inputStyle={width:"100%",boxSizing:"border-box",padding:"7px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:T.bg,color:T.text,fontSize:12,fontFamily:T.num,outline:"none"};
+
+  return(
+    <div style={{height:"100%",display:"flex",gap:8,overflow:"hidden"}}>
+      {/* Config panel */}
+      <div style={{width:236,flexShrink:0,background:T.surface,borderRadius:14,border:`1px solid ${T.border}`,overflow:"hidden",display:"flex",flexDirection:"column"}}>
+        <div style={{padding:"18px 16px 12px",flexShrink:0,borderBottom:`1px solid ${T.border}`}}>
+          <div style={{fontSize:15,fontWeight:700,color:T.text,letterSpacing:"-0.02em",marginBottom:2}}>Backtester</div>
+          <div style={{fontSize:11,color:T.textMuted}}>Simulate strategies on historical data</div>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"14px 14px 14px"}}>
+          <BtLabel T={T}>Ticker</BtLabel>
+          <input value={ticker} onChange={e=>setTicker(e.target.value.toUpperCase())} placeholder="e.g. AAPL" style={{...inputStyle,marginBottom:12}}/>
+
+          <BtLabel T={T}>Timeframe</BtLabel>
+          <div style={{display:"flex",gap:3,marginBottom:12,flexWrap:"wrap"}}>
+            {TFS.map(t=>(
+              <button key={t} onClick={()=>setTf(t)} style={{flex:"1 0 auto",padding:"5px 0",borderRadius:5,border:`1px solid ${tf===t?T.accent:T.border}`,background:tf===t?T.accentLight:"transparent",color:tf===t?T.accent:T.textMuted,fontSize:10,fontWeight:600,cursor:"pointer",minWidth:32,transition:"all 0.1s"}}>
+                {t}
+              </button>
+            ))}
+          </div>
+
+          <BtLabel T={T}>Strategy</BtLabel>
+          <select value={strategy} onChange={e=>{setStrategy(e.target.value);setResult(null);}} style={{...inputStyle,marginBottom:12,cursor:"pointer"}}>
+            {STRATEGIES.map(s=><option key={s.id} value={s.id}>{s.label}</option>)}
+          </select>
+
+          {strategy==="ema_cross"&&(
+            <div style={{display:"flex",gap:8,marginBottom:12}}>
+              <div style={{flex:1}}>
+                <BtLabel T={T}>Fast EMA</BtLabel>
+                <input type="number" value={emFast} onChange={e=>setEmFast(+e.target.value)} min={2} max={50} style={inputStyle}/>
+              </div>
+              <div style={{flex:1}}>
+                <BtLabel T={T}>Slow EMA</BtLabel>
+                <input type="number" value={emSlow} onChange={e=>setEmSlow(+e.target.value)} min={5} max={200} style={inputStyle}/>
+              </div>
+            </div>
+          )}
+          {strategy==="rsi_mean_rev"&&(
+            <div style={{display:"flex",gap:8,marginBottom:12}}>
+              <div style={{flex:1}}>
+                <BtLabel T={T}>Buy below</BtLabel>
+                <input type="number" value={rsiOS} onChange={e=>setRsiOS(+e.target.value)} min={10} max={49} style={inputStyle}/>
+              </div>
+              <div style={{flex:1}}>
+                <BtLabel T={T}>Sell above</BtLabel>
+                <input type="number" value={rsiOB} onChange={e=>setRsiOB(+e.target.value)} min={51} max={95} style={inputStyle}/>
+              </div>
+            </div>
+          )}
+
+          <div style={{height:1,background:T.border,margin:"4px 0 12px"}}/>
+
+          <BtLabel T={T}>Starting Capital ($)</BtLabel>
+          <input type="number" value={capital} onChange={e=>setCapital(+e.target.value)} min={1000} step={1000} style={{...inputStyle,marginBottom:12}}/>
+
+          <BtLabel T={T}>Position Size — {posSize}% of equity</BtLabel>
+          <input type="range" value={posSize} onChange={e=>setPosSize(+e.target.value)} min={10} max={100} step={5}
+            style={{width:"100%",accentColor:T.accent,marginBottom:12}}/>
+
+          <BtLabel T={T}>Commission ($ per side)</BtLabel>
+          <input type="number" value={commission} onChange={e=>setCommission(+e.target.value)} min={0} step={0.5} style={{...inputStyle,marginBottom:16}}/>
+
+          <button onClick={handleRun} disabled={running}
+            style={{width:"100%",padding:"9px 0",borderRadius:8,border:"none",background:running?T.border:T.accent,color:running?T.textMuted:"#fff",fontSize:13,fontWeight:600,cursor:running?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6,fontFamily:T.ui,transition:"all 0.15s"}}>
+            {running
+              ?<><svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Running…</>
+              :<><svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>Run Backtest</>
+            }
+          </button>
+          {error&&<div style={{marginTop:10,fontSize:11,color:T.neg,textAlign:"center"}}>{error}</div>}
+
+          <div style={{marginTop:12,padding:"9px 10px",borderRadius:7,background:dark?"#1A1F2A":"#F0F4FF",border:`1px solid ${dark?"#2A3450":"#C7D7FF"}`}}>
+            <div style={{fontSize:10,color:T.textMuted,lineHeight:1.5}}>Educational use only. Simulated results assume no slippage. Past performance does not indicate future results.</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Results panel */}
+      <div style={{flex:1,display:"flex",flexDirection:"column",gap:8,overflow:"hidden",minWidth:0}}>
+        {!result&&!running&&(
+          <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:T.surface,borderRadius:14,border:`1px solid ${T.border}`,gap:12}}>
+            <div style={{width:52,height:52,borderRadius:14,background:T.bg,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",color:T.textMuted}}>
+              <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            </div>
+            <div style={{fontSize:13,color:T.textSub,textAlign:"center",maxWidth:340,lineHeight:1.6}}>
+              Configure a strategy and click <strong style={{color:T.text}}>Run Backtest</strong> to simulate it on historical price data.
+            </div>
+          </div>
+        )}
+
+        {result&&(
+          <>
+            {/* Stat cards */}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,flexShrink:0}}>
+              {[
+                {label:"Total Return",    val:fmtPct(result.totalReturn,true), color:result.totalReturn>=0?T.pos:T.neg,  sub:`vs B&H: ${fmtPct(result.bnh,true)}`},
+                {label:"Win Rate",        val:`${fmt(result.winRate,1)}%`,       color:result.winRate>=50?T.pos:T.neg,    sub:`${result.trades.length} trades`},
+                {label:"Max Drawdown",    val:fmtPct(-result.maxDD),             color:T.neg,                             sub:"Peak to trough"},
+                {label:"Profit Factor",   val:fmt(result.profitFactor),          color:result.profitFactor>=1?T.pos:T.neg,sub:`Sharpe: ${fmt(result.sharpe,2)}`},
+                {label:"Final Equity",    val:fmtCur(result.equity),             color:result.equity>=capital?T.pos:T.neg,sub:`Started: ${fmtCur(capital)}`},
+                {label:"Avg Win",         val:fmtPct(result.avgWin,true),        color:T.pos,                             sub:"Per winning trade"},
+                {label:"Avg Loss",        val:fmtPct(result.avgLoss,true),       color:T.neg,                             sub:"Per losing trade"},
+                {label:"Sharpe Ratio",    val:fmt(result.sharpe,2),              color:result.sharpe>=1?T.pos:result.sharpe>=0?T.amber:T.neg, sub:"Annualized"},
+              ].map(({label,val,color,sub})=>(
+                <div key={label} style={{background:T.surface,borderRadius:10,border:`1px solid ${T.border}`,padding:"12px 14px"}}>
+                  <div style={{fontSize:10,color:T.textMuted,marginBottom:4,fontWeight:500}}>{label}</div>
+                  <div style={{fontSize:16,fontWeight:700,color,fontFamily:T.num,letterSpacing:"-0.02em"}}>{val}</div>
+                  <div style={{fontSize:10,color:T.textMuted,marginTop:2}}>{sub}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Equity curve */}
+            <div style={{background:T.surface,borderRadius:12,border:`1px solid ${T.border}`,padding:"14px 16px",flexShrink:0}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                <span style={{fontSize:12,fontWeight:600,color:T.text}}>Equity Curve</span>
+                <span style={{fontSize:10,color:T.textMuted,fontFamily:T.num}}>{ticker} · {tf} · {STRATEGIES.find(s=>s.id===strategy)?.label}</span>
+              </div>
+              <div style={{height:130,borderRadius:6,overflow:"hidden"}}>
+                <EquityCurve curve={result.equityCurve}/>
+              </div>
+            </div>
+
+            {/* Trade log */}
+            <div style={{flex:1,background:T.surface,borderRadius:12,border:`1px solid ${T.border}`,overflow:"hidden",display:"flex",flexDirection:"column",minHeight:0}}>
+              <div style={{padding:"12px 14px",fontSize:12,fontWeight:600,color:T.text,flexShrink:0,borderBottom:`1px solid ${T.border}`}}>
+                Trade Log <span style={{fontWeight:400,color:T.textMuted}}>({result.trades.length} trades)</span>
+              </div>
+              <div style={{flex:1,overflowY:"auto",minHeight:0}}>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+                  <thead>
+                    <tr style={{position:"sticky",top:0,background:T.surface,zIndex:1}}>
+                      {["#","Entry Date","Entry $","Exit Date","Exit $","Return","P&L","Result"].map(h=>(
+                        <th key={h} style={{padding:"8px 10px",textAlign:"left",fontSize:10,fontWeight:600,color:T.textMuted,whiteSpace:"nowrap",borderBottom:`1px solid ${T.border}`}}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {result.trades.map((t,i)=>(
+                      <tr key={i} style={{borderBottom:`1px solid ${T.borderLight}`,transition:"background 0.1s"}}
+                        onMouseEnter={e=>e.currentTarget.style.background=T.bg}
+                        onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                        <td style={{padding:"7px 10px",color:T.textMuted,fontFamily:T.num}}>{i+1}</td>
+                        <td style={{padding:"7px 10px",color:T.textMuted,fontFamily:T.num,whiteSpace:"nowrap"}}>{t.entryDate?new Date(t.entryDate).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"2-digit"}):"—"}</td>
+                        <td style={{padding:"7px 10px",color:T.text,fontFamily:T.num,fontWeight:600}}>${(+t.entry).toFixed(2)}</td>
+                        <td style={{padding:"7px 10px",color:T.textMuted,fontFamily:T.num,whiteSpace:"nowrap"}}>{t.exitDate?new Date(t.exitDate).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"2-digit"}):"—"}</td>
+                        <td style={{padding:"7px 10px",color:T.text,fontFamily:T.num,fontWeight:600}}>${(+t.exit).toFixed(2)}</td>
+                        <td style={{padding:"7px 10px",fontFamily:T.num,fontWeight:600,color:t.pct>=0?T.pos:T.neg}}>{t.pct>=0?"+":""}{t.pct.toFixed(2)}%</td>
+                        <td style={{padding:"7px 10px",fontFamily:T.num,color:t.win?T.pos:T.neg}}>{t.pnl>=0?"+":""}{fmtCur(t.pnl)}</td>
+                        <td style={{padding:"7px 10px"}}>
+                          <span style={{fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:3,background:t.win?(dark?"#0D2818":"#F0FDF4"):(dark?"#2D0F0F":"#FEF2F2"),color:t.win?T.pos:T.neg}}>
+                            {t.win?"WIN":"LOSS"}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                    {result.trades.length===0&&(
+                      <tr><td colSpan={8} style={{padding:24,textAlign:"center",color:T.textMuted,fontSize:12}}>No trades generated — try a different strategy or timeframe</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── SCANNER PAGE ─────────────────────────────────────────────────────────────
 const SCAN_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
@@ -3639,8 +3973,9 @@ function ChartWizInner(){
             {/* Icon sidebar */}
             <div style={{width:52,flexShrink:0,borderRadius:14,background:T.surface,border:`1px solid ${T.border}`,display:"flex",flexDirection:"column",alignItems:"center",paddingTop:8,gap:2,overflow:"hidden"}}>
               {[
-                {id:"chart",  tip:"Dashboard",  svg:<svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>},
-                {id:"scanner",tip:"Screener",   svg:<svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>},
+                {id:"chart",    tip:"Dashboard",  svg:<svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>},
+                {id:"scanner",  tip:"Screener",   svg:<svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>},
+                {id:"backtest", tip:"Backtester", svg:<svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>},
               ].map(({id,tip,svg})=>{
                 const isActive=page===id||(id==="chart"&&page==="chart");
                 return(
@@ -3725,6 +4060,11 @@ function ChartWizInner(){
         {page==="scanner"&&(
           <div style={{borderRadius:14,overflow:"hidden",height:"100%",border:`1px solid ${T.border}`}}>
             <ScannerPage T={T} dark={dark} isPremium={isPremium} onSelect={tk=>{setTicker(tk);setPage("chart");}}/>
+          </div>
+        )}
+        {page==="backtest"&&(
+          <div style={{height:"100%",overflow:"hidden"}}>
+            <BacktestPage T={T} dark={dark} isPremium={isPremium}/>
           </div>
         )}
       </div>
