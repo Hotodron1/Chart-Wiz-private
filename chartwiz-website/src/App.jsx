@@ -179,7 +179,7 @@ const ARTICLES = [
   // Using ChartWiz
   {cat:"Using ChartWiz", title:"Getting started with ChartWiz: a walkthrough for new users", desc:"A step-by-step guide to setting up your watchlist, reading your first chart, and asking the AI your first question.", mins:6},
   {cat:"Using ChartWiz", title:"How to use the Signal Scanner to find trade setups", desc:"The scanner does the heavy lifting. Learn how to filter results, understand the signals it surfaces, and find stocks worth investigating.", mins:5},
-  {cat:"Using ChartWiz", title:"Using the Risk Calculator before every trade", desc:"One of the most overlooked tools in trading. Learn how to use it to size your position correctly and protect your account from big losses.", mins:4},
+  {cat:"Using ChartWiz", title:"How to use the Market Scanner to find setups in seconds", desc:"The scanner analyzes 252+ stocks using real data and surfaces the strongest bullish, bearish, and neutral setups — so you always know where to look.", mins:4},
   {cat:"Using ChartWiz", title:"How to draw support and resistance lines on your chart", desc:"Drawing your own levels takes about 30 seconds. This guide shows you how to add lines, move them, and delete ones you no longer need.", mins:3},
   {cat:"Using ChartWiz", title:"Setting price alerts so you never miss a move", desc:"Stop watching charts all day. Set an alert at your key price level and ChartWiz will notify you the moment the stock gets there.", mins:3},
   {cat:"Using ChartWiz", title:"How to ask the AI better questions and get better answers", desc:"The AI is only as useful as the question you ask. Here are the most effective ways to phrase your questions to get specific, actionable responses.", mins:4},
@@ -275,12 +275,12 @@ export default function App() {
   },[]);
 
   const PLANS=[
-    {name:"Free",price:{m:"$0",a:"$0"},desc:"Get started with no commitment.",hot:false,
-     features:["Full stock dashboard","5 watchlist symbols","Daily charts","Basic drawing tools","Signal scanner (once per day)"],
-     locked:["AI chart analysis","Intraday charts (1m–1H)","Unlimited scanner","Price alerts","News feed"],cta:"Download Free"},
-    {name:"Pro",price:{m:"$6.99",a:"$5.99"},desc:"Everything you need to invest with confidence.",hot:true,
-     features:["15-min delayed data","Unlimited AI questions","25 watchlist symbols","All chart timeframes","All drawing tools & indicators","20 price alerts","Full news feed","Priority support"],
-     locked:[],cta:"Start 14-Day Free Trial"},
+    {name:"Free",price:{m:"$0",a:"$0"},desc:"Start charting immediately. No account needed.",hot:false,
+     features:["Live charts on any stock","Unlimited watchlist stocks","All chart timeframes & drawing tools","9 drawing tools + indicators","5 AI chart questions per day","3 price alerts with OS notifications","Signal scanner (1 scan/week)"],
+     locked:["Unlimited AI chat (smarter model)","Unlimited scanner scans","Unlimited price alerts","Real analyst ratings & recommendations"],cta:"Download Free"},
+    {name:"Pro",price:{m:"$6.99",a:"$5.99"},desc:"For investors who want the full picture.",hot:true,
+     features:["Everything in Free","Unlimited AI chat — Claude Sonnet","Deeper, more detailed AI analysis","Unlimited scanner scans","Unlimited price alerts","Real analyst ratings & recommendations","Priority support"],
+     locked:[],cta:"Upgrade to Pro — $6.99/mo"},
   ];
 
   const VS=[
@@ -314,6 +314,8 @@ export default function App() {
         .faq-btn{width:100%;background:none;border:none;color:#09090b;font-family:inherit;font-size:15px;font-weight:500;padding:24px 0;text-align:left;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:16px;transition:color 0.2s;}
         .faq-btn:hover{color:#2563eb;}
         .tab-btn{background:none;border:none;padding:7px 16px;border-radius:6px;font-size:13px;font-weight:500;cursor:pointer;transition:all 0.2s;}
+        .nav-link{background:none;border:none;color:#64748b;font-size:13.5px;font-weight:500;padding:8px 14px;border-radius:8px;cursor:pointer;transition:all 0.15s;font-family:inherit;}
+        .nav-link:hover{color:#0f1729;background:#f1f5f9;}
       `}</style>
 
       {/* NAV */}
@@ -331,7 +333,11 @@ export default function App() {
             </div>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:8}}>
-            <button className="nav-link">Log in</button>
+            <button style={{background:"transparent",border:"1.5px solid #e2e8f0",color:"#475569",borderRadius:7,padding:"8px 18px",fontSize:13,fontWeight:600,fontFamily:"inherit",cursor:"pointer",transition:"all 0.15s"}}
+              onMouseEnter={e=>{e.currentTarget.style.borderColor="#2563eb";e.currentTarget.style.color="#2563eb";}}
+              onMouseLeave={e=>{e.currentTarget.style.borderColor="#e2e8f0";e.currentTarget.style.color="#475569";}}>
+              Log in
+            </button>
             <a href={DOWNLOADS.win.url} download style={{textDecoration:"none"}}>
               <button className="primary-btn" style={{background:"#2563eb",color:"#fff",border:"none",borderRadius:7,padding:"8px 18px",fontSize:13,fontWeight:600,fontFamily:"inherit",boxShadow:"0 2px 8px rgba(37,99,235,0.28)", transition:"all 0.3s"}}>
                 Download Free
@@ -416,7 +422,7 @@ export default function App() {
       {/* SOCIAL PROOF */}
       <div style={{background:"#f8f9fc",borderTop:"1px solid #e2e8f0",borderBottom:"1px solid #e2e8f0",padding:"18px 24px"}}>
         <div style={{maxWidth:1140,margin:"0 auto",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:20}}>
-          <div style={{fontSize:13,color:"#94a3b8"}}>Trusted by <strong style={{color:"#0f1729"}}>12,000+</strong> investors</div>
+          <div style={{fontSize:13,color:"#94a3b8"}}>Built for <strong style={{color:"#0f1729"}}>everyday investors</strong> — not just professionals</div>
           <div style={{display:"flex",gap:20,alignItems:"center",flexWrap:"wrap"}}>
             {[{bg:"#2563eb",init:"M",name:"Marcus",text:"\"Finally understand what I'm buying\""},{bg:"#16a34a",init:"S",name:"Sarah",text:"\"The AI saved me from a bad trade\""},{bg:"#d97706",init:"J",name:"James",text:"\"Best $7 I spend each month\""}].map((r,i)=>(
               <div key={i} style={{display:"flex",alignItems:"center",gap:8}}>
@@ -445,7 +451,7 @@ export default function App() {
           {[
             {num:"01",icon:<Icon.Scan/>,title:"Find a setup",desc:"The Signal Scanner automatically surfaces stocks with strong patterns so you always know where to look — no manual searching required.",col:"#eff6ff",border:"#bfdbfe",text:"#2563eb"},
             {num:"02",icon:<Icon.Brain/>,title:"Understand it",desc:"Open any chart and ask the AI what you're looking at. \"Is this a good entry?\" \"What does this indicator mean?\" — plain English answers every time.",col:"#f0fdf4",border:"#bbf7d0",text:"#16a34a"},
-            {num:"03",icon:<Icon.Shield/>,title:"Manage your risk",desc:"Use the Risk Calculator before every trade. Enter your account size and maximum loss — it tells you exactly how many shares to buy.",col:"#fffbeb",border:"#fde68a",text:"#d97706"},
+            {num:"03",icon:<Icon.Bell/>,title:"Get alerted instantly",desc:"Set a price alert on any stock and ChartWiz notifies you the moment it hits your level — right in your system notifications, even when the app is minimized.",col:"#fffbeb",border:"#fde68a",text:"#d97706"},
           ].map((s,i)=>(
             <div key={i} className="step-card" style={{background:s.col,border:`1.5px solid ${s.border}`,borderRadius:14,padding:"28px 24px",position:"relative",zIndex:1}}>
               <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:18}}>
@@ -470,9 +476,9 @@ export default function App() {
             <p style={{fontSize:15,color:"#475569",lineHeight:1.8,marginBottom:24}}>Most trading tools show you charts and leave you to figure it out. ChartWiz AI explains what every chart and indicator means based on current data — not generic advice.</p>
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
               {[
-                {q:"\"Should I buy this stock?\"",a:"Gets a direct signal with specific reasoning behind it"},
-                {q:"\"What does RSI mean?\"",a:"Gets a plain-English explanation in seconds"},
-                {q:"\"How much should I risk?\"",a:"Gets position size, stop-loss level, and risk percentage"},
+                {q:"\"What is this chart pattern?\"",a:"Gets a plain-English explanation of what the chart is doing right now"},
+                {q:"\"What does RSI mean for NVDA?\"",a:"Gets a specific answer based on real current data, not generic theory"},
+                {q:"\"Where should I watch for support?\"",a:"Gets the key price levels traders are watching, with context"},
               ].map((item,i)=>(
                 <div key={i} style={{display:"flex",gap:14,alignItems:"center",padding:"12px 16px",background:"#fff",border:"1px solid #e2e8f0",borderRadius:10}}>
                   <div style={{fontSize:13,color:"#2563eb",fontWeight:600,fontFamily:"'DM Mono',monospace",flexShrink:0}}>{item.q}</div>
@@ -503,12 +509,12 @@ export default function App() {
         </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:18}}>
           {[
-            {icon:<Icon.Chart/>,title:"Live Stock Charts",desc:"See how any stock has moved over time. Add indicators with one click, draw your own levels, and switch between timeframes instantly.",badge:null},
-            {icon:<Icon.Brain/>,title:"AI That Explains Everything",desc:"Every signal, every indicator, every chart pattern — explained in plain English. Ask follow-up questions. Get specific. No more Googling jargon.",badge:"Most used"},
-            {icon:<Icon.Scan/>,title:"Signal Scanner",desc:"Instead of checking hundreds of charts manually, the scanner surfaces stocks with strong patterns right now so you always know where to look.",badge:null},
-            {icon:<Icon.Shield/>,title:"Risk Calculator",desc:"Know exactly how many shares to buy before you place a trade. Enter your account size and maximum loss — it calculates everything automatically.",badge:"Protect your account"},
-            {icon:<Icon.Bell/>,title:"Price Alerts",desc:"Set an alert on any stock and get notified the moment it hits your price. Stop watching charts all day.",badge:null},
-            {icon:<Icon.News/>,title:"Pre-Analyzed News",desc:"Every headline is tagged Bullish, Bearish, or Neutral so you instantly know if news is good or bad for the stock — no interpretation needed.",badge:null},
+            {icon:<Icon.Chart/>,title:"Live Stock Charts",desc:"Real-time data on any stock. Switch between 9 timeframes, zoom in on any period, and pan the chart freely — all powered by live Yahoo Finance data.",badge:null},
+            {icon:<Icon.Brain/>,title:"AI Chart Analysis",desc:"Ask the AI anything about a chart in plain English. Get real answers based on current price, trend, momentum, and key levels — not generic theory.",badge:"Most popular"},
+            {icon:<Icon.Scan/>,title:"Market Scanner",desc:"Scan 252+ stocks in under 60 seconds using real OHLCV data. RSI, EMA alignment, Bollinger Bands, Supertrend — surfaces the strongest setups automatically.",badge:null},
+            {icon:<Icon.Shield/>,title:"Drawing Tools",desc:"9 professional drawing tools built in: trend lines, horizontal & vertical lines, Fibonacci retracements, rectangles, parallel channels, rays, and more.",badge:null},
+            {icon:<Icon.Bell/>,title:"Price Alerts",desc:"Set a price alert on any stock and get a real OS desktop notification the moment it hits — even when ChartWiz is minimized in the background.",badge:null},
+            {icon:<Icon.Scan/>,title:"Analyst Ratings",desc:"See real analyst consensus — Buy, Hold, or Sell — pulled live from Wall Street recommendations. Know what the professionals think before you decide.",badge:null},
           ].map((f,i)=>(
             <div key={i} className="feat-card" style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:12,padding:"24px 22px",position:"relative"}}>
               {f.badge&&<div style={{position:"absolute",top:14,right:14,fontSize:10,fontWeight:600,color:"#2563eb",background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"2px 8px"}}>{f.badge}</div>}
@@ -565,10 +571,10 @@ export default function App() {
       <section style={{maxWidth:1140,margin:"0 auto",padding:"72px 24px"}}>
         <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:18}}>
           {[
-            {v:12000,s:"+",l:"Investors signed up",sub:"and growing every day"},
-            {v:8400,s:"+",l:"Stocks covered",sub:"US equities and ETFs"},
-            {v:0,s:"$0",l:"To get started",sub:"Free forever, upgrade anytime",custom:true},
-            {v:30,s:" sec",l:"To open an account",sub:"No lengthy forms"},
+            {v:252,s:"+",l:"Stocks in the scanner",sub:"Real data, real signals"},
+            {v:9,s:"",l:"Drawing tools built in",sub:"Trend lines, Fibonacci, channels"},
+            {v:0,s:"$0",l:"To get started",sub:"Free to download, no account needed",custom:true},
+            {v:2,s:"",l:"Free AI questions daily",sub:"Upgrade for unlimited"},
           ].map((s,i)=>(
             <div key={i} style={{border:"1px solid #e2e8f0",borderRadius:12,padding:"26px 22px",textAlign:"center"}}>
               <div style={{fontFamily:"'Playfair Display',serif",fontSize:40,fontWeight:700,color:"#0f1729",lineHeight:1,marginBottom:6}}>
@@ -589,7 +595,7 @@ export default function App() {
           <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:18}}>
             {[
               {bg:"#2563eb",init:"M",name:"Marcus T.",role:"New investor, 6 months in",text:"I tried TradingView and had no idea what I was looking at. ChartWiz was the first tool where I actually understood what the chart was telling me. The AI explains everything without making me feel lost."},
-              {bg:"#16a34a",init:"S",name:"Sarah K.",role:"Moved savings to stocks last year",text:"The risk calculator alone is worth the subscription. I used to guess how many shares to buy. Now I know exactly how much I'm risking on every trade before I place it."},
+              {bg:"#16a34a",init:"S",name:"Sarah K.",role:"Moved savings to stocks last year",text:"The AI is what sold me. I open a chart, ask what I'm looking at, and get a clear explanation in seconds. I've learned more in two months with ChartWiz than I did in a year of Googling."},
               {bg:"#d97706",init:"J",name:"James L.",role:"Casual investor, 2 years trading",text:"I still use TradingView for some things, but ChartWiz is where I go first. The signal scanner finds setups I would have missed, and the AI saves me significant research time every morning."},
             ].map((t,i)=>(
               <div key={i} style={{border:"1px solid #e2e8f0",borderRadius:12,padding:"24px 22px",background:"#fff"}}>
@@ -616,7 +622,7 @@ export default function App() {
           <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:"clamp(28px,3.5vw,44px)",fontWeight:700,color:"#0f1729",lineHeight:1.15,marginBottom:16}}>
             Start free.<br/><em style={{color:"#2563eb",fontStyle:"italic",fontWeight:500}}>Upgrade when you're ready.</em>
           </h2>
-          <p style={{fontSize:15,color:"#475569",maxWidth:480,margin:"0 auto 24px",lineHeight:1.7}}>The free plan is genuinely useful. Upgrade when you want AI analysis, more stocks, or real-time data.</p>
+          <p style={{fontSize:15,color:"#475569",maxWidth:480,margin:"0 auto 24px",lineHeight:1.7}}>The free plan is genuinely useful. Upgrade when you want unlimited AI, unlimited watchlist, and unlimited scans.</p>
           <div style={{display:"inline-flex",background:"#f1f5f9",borderRadius:8,padding:4,gap:2}}>
             {[["monthly","Monthly"],["annual","Annual — save ~20%"]].map(([v,l])=>(
               <button key={v} className="tab-btn" onClick={()=>setAnnual(v==="annual")}
@@ -634,7 +640,7 @@ export default function App() {
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
                   <span style={{fontSize:19,fontWeight:700,color:"#0f1729",fontFamily:"inherit"}}>{plan.name}</span>
                   <span style={{fontSize:10,fontWeight:600,background:"#f8fafc",color:"#94a3b8",border:"1px solid #e2e8f0",borderRadius:20,padding:"3px 8px"}}>
-                    {plan.name==="Free"?"Free forever":"15-min delay"}
+                    {plan.name==="Free"?"Free forever":"Live data"}
                   </span>
                 </div>
                 <p style={{fontSize:13,color:"#94a3b8",marginBottom:16}}>{plan.desc}</p>
@@ -673,14 +679,14 @@ export default function App() {
                 <button className={plan.hot ? "primary-btn" : ""} style={{width:"100%",padding:"14px 0",fontSize:14,fontFamily:"inherit",fontWeight:700,background:plan.hot?"#2563eb":"transparent",color:plan.hot?"#fff":"#0f1729",border:plan.hot?"none":"1.5px solid #e2e8f0",borderRadius:9,boxShadow:plan.hot?"0 4px 14px rgba(37,99,235,0.28)":"none",cursor:"pointer", transition: "all 0.3s"}}>
                   {plan.cta}
                 </button>
-                {plan.price.m!=="$0"&&<p style={{textAlign:"center",fontSize:11,color:"#94a3b8",marginTop:10}}>14-day free trial · Cancel anytime</p>}
+                {plan.price.m!=="$0"&&<p style={{textAlign:"center",fontSize:11,color:"#94a3b8",marginTop:10}}>Cancel anytime · No contracts</p>}
               </div>
             </div>
           ))}
         </div>
         <div style={{marginTop:24,padding:"16px 22px",background:"#f8f9fc",border:"1px solid #e2e8f0",borderRadius:10,textAlign:"center"}}>
           <p style={{fontSize:13,color:"#475569",lineHeight:1.7}}>
-            <strong style={{color:"#0f1729"}}>Not sure which plan?</strong> Start with the free download. Most users stay on the free plan for weeks before upgrading. No pressure and no expiry on your free account.
+            <strong style={{color:"#0f1729"}}>Start free — upgrade when the AI pays for itself.</strong> The free plan is a full working app, not a trial. When you hit your AI question limit and realize you need more answers, that's when upgrading makes sense. No pressure before that.
           </p>
         </div>
       </section>
@@ -693,11 +699,11 @@ export default function App() {
         <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:34,fontWeight:700,color:"#0f1729",textAlign:"center",marginBottom:48}}>Common questions</h2>
         {[
           {q:"Do I need to know anything about investing to use this?",a:"Not at all — that's the whole point. ChartWiz is designed for people who are just starting out. The AI explains every chart, every indicator, and every signal in plain English. You can ask 'what does this mean?' and get a clear answer."},
-          {q:"Is it really free? What's the catch?",a:"Genuinely free to download. No credit card, no trial that auto-charges. The free plan gives you full access to the dashboard and charts. Upgrade when you want AI analysis, more watchlist symbols, or real-time data."},
-          {q:"What's the difference between the plans?",a:"Free and Pro show prices from 15 minutes ago — fine for swing trading and investing where you're holding for days or weeks. Day Trader shows live prices updated in real time, which you need for active intraday trading."},
-          {q:"How is this different from just Googling stock tips?",a:"Google gives you generic opinions. ChartWiz AI looks at the actual current data for the specific stock you're asking about — its RSI, moving averages, volume, price action — and gives you analysis based on that."},
-          {q:"Can I cancel my subscription anytime?",a:"Yes, always. No contracts, no cancellation fees. Cancel from your account settings whenever you want."},
-          {q:"What stocks can I analyze?",a:"All major US equities and ETFs — over 8,400 stocks total including NVDA, AAPL, TSLA, SPY, QQQ, and thousands more."},
+          {q:"Is it really free? What's the catch?",a:"Genuinely free to download. No credit card, no trial period, no auto-charge. The free plan gives you full chart access, drawing tools, 3 watchlist stocks, 2 AI questions per day, and 1 scanner scan per week. Upgrade only when you want more."},
+          {q:"What's the difference between the plans?",a:"Both plans use the same live Yahoo Finance data. The difference is limits: Free gives you 3 watchlist stocks, 2 AI chats per day, 2 price alerts, and 1 scan per week. Pro removes all those limits and upgrades the AI model to Claude Sonnet for deeper, more detailed analysis."},
+          {q:"How is this different from just Googling stock tips?",a:"Google gives you generic opinions. ChartWiz AI looks at the actual current data for the specific stock you're asking about — its RSI, moving averages, volume, price action — and gives you analysis based on that right now."},
+          {q:"Can I cancel my subscription anytime?",a:"Yes, always. No contracts, no cancellation fees. Cancel from your account settings at any time."},
+          {q:"What stocks can I analyze?",a:"Any US-listed stock or ETF you can search by ticker — NVDA, AAPL, TSLA, SPY, QQQ, and thousands more. The Market Scanner covers 252 curated stocks with real OHLCV data for technical analysis."},
         ].map((f,i)=>(
           <div key={i} className="faq-row">
             <button className="faq-btn" onClick={()=>setFaqOpen(faqOpen===i?null:i)}>
@@ -718,7 +724,7 @@ export default function App() {
             Stop guessing.<br/><em style={{color:"#93c5fd",fontStyle:"italic",fontWeight:500}}>Start understanding.</em>
           </h2>
           <p style={{fontSize:15,color:"#64748b",lineHeight:1.75,marginBottom:36}}>
-            Join 12,000+ investors who use ChartWiz to make smarter decisions — even if they're just starting out.
+            Free to download — no account, no credit card. Most people find their "aha moment" in the first 5 minutes.
           </p>
           <DownloadButtons center/>
         </div>
