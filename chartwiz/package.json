@@ -8,7 +8,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:app": "concurrently -n vite,electron -c cyan,yellow \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "dev:app": "concurrently -n vite,electron -c cyan,yellow \"vite\" \"wait-on http://localhost:5200 && electron .\"",
     "build": "vite build",
     "build:app": "vite build && electron-builder",
     "preview": "vite preview",
