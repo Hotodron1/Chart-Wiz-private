@@ -265,11 +265,15 @@ ipcMain.handle('alert:notify', (_evt, { title, body }) => {
 ipcMain.handle('settings:get', () => loadSettings());
 ipcMain.handle('settings:set', (_evt, data) => { saveSettings({...loadSettings(),...data}); return true; });
 
+// Set your Anthropic API key here so all users can access AI without entering their own.
+// Get one at https://console.anthropic.com — free tier available.
+const CHARTWIZ_AI_KEY = '';
+
 // ── IPC: Anthropic AI chat (proxied through main to avoid CORS) ───────────────
 ipcMain.handle('ai:chat', async (_evt, { messages, systemPrompt, premium }) => {
   const settings = loadSettings();
-  const apiKey   = settings.anthropicKey || process.env.ANTHROPIC_API_KEY || '';
-  if (!apiKey) return { ok: false, error: 'No API key. Add your Anthropic key in Settings.' };
+  const apiKey   = settings.anthropicKey || CHARTWIZ_AI_KEY || process.env.ANTHROPIC_API_KEY || '';
+  if (!apiKey) return { ok: false, error: 'AI key not set up yet. Add your Anthropic API key in Settings → App Settings.' };
 
   // Premium users get Claude Sonnet (smarter, more detailed) with higher token budget
   const model     = premium ? 'claude-sonnet-4-6'       : 'claude-haiku-4-5-20251001';

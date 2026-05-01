@@ -364,6 +364,7 @@ const TOOL_CATALOG = {
   rect:    {label:"Rectangle",             group:"shapes"},
   channel: {label:"Parallel Channel",      group:"shapes"},
   fib:     {label:"Fibonacci Retracement", group:"fib"},
+  text:    {label:"Text Note",             group:"annotation"},
 };
 
 const DEFAULT_INDS = {sma20:false,sma50:true,ema9:false,ema21:false,ema50:false,vol:true,rsi:false};
@@ -377,9 +378,9 @@ const getInitials=name=>{const p=name.trim().split(/\s+/).filter(Boolean);if(!p.
 const avatarColor=name=>{const h=name.split('').reduce((a,c)=>(a*31+c.charCodeAt(0))|0,1);return AVATAR_PALETTE[Math.abs(h)%AVATAR_PALETTE.length];};
 
 // ─── FREE TIER LIMITS ────────────────────────────────────────────────────────
-const FREE_ALERT_LIMIT     = 2;
-const FREE_AI_DAILY_LIMIT  = 2;
-const FREE_WATCHLIST_LIMIT = 3;
+const FREE_ALERT_LIMIT     = 3;
+const FREE_AI_DAILY_LIMIT  = 5;
+const FREE_WATCHLIST_LIMIT = Infinity; // watchlist is unlimited — AI is the paygate
 const ALERT_COLORS = ["#F59E0B","#3B82F6","#EC4899","#10B981","#8B5CF6"];
 // Auto-activate premium when running from localhost (dev mode)
 const DEV_MODE = typeof window !== "undefined" && window.location.protocol === "http:";
@@ -437,6 +438,11 @@ function TradingChart({ticker,stock,T=LIGHT,dark=false,alertsOpen=false,onAlerts
   const chartAreaRef=useRef(null);   // for fullscreen API
   const [wickColors,setWickColors]=useState({up:"",down:""});
   const [showCandleStyle,setShowCandleStyle]=useState(false);
+  const [magnetMode,setMagnetMode]=useState(false);
+  const magnetRef=useRef(false);
+  useEffect(()=>{magnetRef.current=magnetMode;},[magnetMode]);
+  const [textPlacing,setTextPlacing]=useState(null); // {x,y,ci,price} — pending text input
+  const [textDraft,setTextDraft]=useState("");
 
   const setTool=t=>{toolRef.current=t;_setTool(t);};
 
@@ -501,7 +507,7 @@ function TradingChart({ticker,stock,T=LIGHT,dark=false,alertsOpen=false,onAlerts
 
   // Derived panel heights from inds state
   // Resizable panel heights
-  const [panelSizes,setPanelSizes]=useState({vol:52,rsi:56});
+  const [panelSizes,setPanelSizes]=useState({vol:72,rsi:84});
   const resizingRef=useRef(null); // {panel,startY,startH}
   const VH_val=inds.vol?panelSizes.vol:0;
   const RH_val=inds.rsi?panelSizes.rsi:0;
@@ -575,6 +581,8 @@ function TradingChart({ticker,stock,T=LIGHT,dark=false,alertsOpen=false,onAlerts
           setTimeout(()=>setToasts(t=>t.filter(x=>x.id!==toastId)),4000);
           // Fire OS desktop notification (works even when app is minimized)
           if(inElectron())window.chartWizAPI.notify(`ChartWiz Alert — ${ticker}`,msg);
+          // Play a short chime via Web Audio API
+          try{const ac=new(window.AudioContext||window.webkitAudioContext)();const o=ac.createOscillator();const g=ac.createGain();o.connect(g);g.connect(ac.destination);o.type="sine";o.frequency.setValueAtTime(880,ac.currentTime);o.frequency.setValueAtTime(660,ac.currentTime+0.12);g.gain.setValueAtTime(0.25,ac.currentTime);g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+0.45);o.start(ac.currentTime);o.stop(ac.currentTime+0.45);}catch{}
           return {...al,triggered:true};
         }
         return al;
@@ -680,13 +688,33 @@ function TradingChart({ticker,stock,T=LIGHT,dark=false,alertsOpen=false,onAlerts
       ctx.fillText(p2.toFixed(decimals),cW+4,Math.round(y)+4);
     });
 
-    // ── Vertical time grid lines ───────────────────────────────────────────
+    // ── Vertical time grid lines + X-axis labels ──────────────────────────
     const timeStep=Math.ceil(vis.length/6);
-    vis.forEach((_,i)=>{
+    const fmtTime=(c)=>{
+      if(c?.time){
+        const d=new Date(c.time);
+        const tfv=tf_ref.current||"1D";
+        if(tfv==="1D")return d.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",hour12:true});
+        if(tfv==="1W"||tfv==="1M")return d.toLocaleDateString("en-US",{month:"short",day:"numeric"});
+        return d.toLocaleDateString("en-US",{month:"short",year:"2-digit"});
+      }
+      return "";
+    };
+    vis.forEach((c,i)=>{
       if(i%timeStep!==0)return;
       const x=Math.round(i*tw+cw/2)+0.5;
       ctx.strokeStyle=T.chartGrid;ctx.lineWidth=1;
       ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,cH);ctx.stroke();
+      // Time label at bottom of chart area
+      const label=fmtTime(candles[si+i]);
+      if(label){
+        ctx.save();
+        ctx.fillStyle=dark?"#C9D1D9":"#1a1a1a";
+        ctx.font=`bold 10px ${T.ui}`;
+        ctx.textAlign="center";
+        ctx.fillText(label,x,cH-4);
+        ctx.restore();
+      }
     });
 
     // SMA lines
@@ -869,6 +897,18 @@ function TradingChart({ticker,stock,T=LIGHT,dark=false,alertsOpen=false,onAlerts
           ctx.fillStyle=colors[li];ctx.font=`9px ${C.num}`;ctx.textAlign="right";
           ctx.fillText(lp.toFixed(2),cW-4,y-2);
         });
+      } else if(d.type==="text"&&d.text){
+        const x=(d.p1.ci-si)*tw+cw/2,y=toY(d.p1.price);
+        if(x>-200&&x<cW+200){
+          ctx.font=`600 12px ${C.ui}`;
+          const tw2=ctx.measureText(d.text).width;
+          const pw=tw2+16,ph=24,pr=5;
+          ctx.fillStyle=col+"22";
+          ctx.strokeStyle=col;ctx.lineWidth=1;
+          ctx.beginPath();ctx.roundRect(x-pw/2,y-ph/2,pw,ph,pr);ctx.fill();ctx.stroke();
+          ctx.fillStyle=col;ctx.textAlign="center";ctx.textBaseline="middle";
+          ctx.fillText(d.text,x,y);
+        }
       }
       ctx.restore();
     });
@@ -1304,7 +1344,16 @@ function TradingChart({ticker,stock,T=LIGHT,dark=false,alertsOpen=false,onAlerts
     return{cH,cW,cw,tw,vc,si,vis,minP,maxP,pR,toY2,toP2,toCi2};
   };
 
-  const toPAt=(y,mx)=>{const g=getChartGeo();if(!g)return{price:0,ci:0};return{price:g.toP2(y),ci:g.toCi2(mx)};};
+  const toPAt=(y,mx)=>{
+    const g=getChartGeo();if(!g)return{price:0,ci:0};
+    const ci=g.toCi2(mx);
+    let price=g.toP2(y);
+    if(magnetRef.current&&candles.length){
+      const c=candles[Math.max(0,Math.min(ci,candles.length-1))];
+      if(c){const levels=[c.open,c.high,c.low,c.close];price=levels.reduce((b,v)=>Math.abs(v-price)<Math.abs(b-price)?v:b,price);}
+    }
+    return{price,ci};
+  };
 
   const onMouseDown=e=>{
     if(e.button!==0)return;
@@ -1491,6 +1540,13 @@ function TradingChart({ticker,stock,T=LIGHT,dark=false,alertsOpen=false,onAlerts
     const{x,y}=getXY(e);const{price,ci}=toPAt(y,x);const ad=adRef.current;
     if(t==="hline"){const nd={type:"hline",price,col:"#F59E0B",id:Date.now()};pushHistory([...drawings,nd]);return;}
     if(t==="vline"){const nd={type:"vline",ci,col:"#94A3B8",id:Date.now()};pushHistory([...drawings,nd]);return;}
+    if(t==="text"){
+      // Get canvas-relative position for the floating input
+      const rect=ovRef.current?.getBoundingClientRect();
+      if(rect)setTextPlacing({x:e.clientX-rect.left,y:e.clientY-rect.top,ci,price});
+      setTextDraft("");
+      return;
+    }
     if(!ad){setAD({type:t,p1:{price,ci},p2:true});}
     else{
       // Only one rect allowed at a time — remove previous rects before adding
@@ -1654,6 +1710,7 @@ function TradingChart({ticker,stock,T=LIGHT,dark=false,alertsOpen=false,onAlerts
     rect:    {tip:"Rectangle",         svg:<svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" width="13" height="13"><rect x="3" y="3" width="18" height="18" rx="1"/></svg>},
     channel: {tip:"Parallel Channel",  svg:<svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" width="13" height="13"><line x1="3" y1="18" x2="21" y2="6"/><line x1="3" y1="22" x2="21" y2="10" strokeDasharray="3,2"/></svg>},
     fib:     {tip:"Fibonacci",         svg:<svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" width="13" height="13"><line x1="3" y1="5" x2="21" y2="5"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="3" y1="14" x2="21" y2="14"/><line x1="3" y1="19" x2="21" y2="19"/></svg>},
+    text:    {tip:"Text Note",         svg:<svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" width="13" height="13"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="7" y1="8" x2="17" y2="8"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="7" y1="16" x2="13" y2="16"/></svg>},
   };
 
   // IND color legend entries to show above chart
@@ -1670,10 +1727,11 @@ function TradingChart({ticker,stock,T=LIGHT,dark=false,alertsOpen=false,onAlerts
   },[showToolPicker]);
 
   const TOOL_GROUPS=[
-    {label:"Select",  tools:["cursor"]},
-    {label:"Lines",   tools:["hline","vline","trend","ray","extline"]},
-    {label:"Shapes",  tools:["rect","channel"]},
-    {label:"Studies", tools:["fib"]},
+    {label:"Select",     tools:["cursor"]},
+    {label:"Lines",      tools:["hline","vline","trend","ray","extline"]},
+    {label:"Shapes",     tools:["rect","channel"]},
+    {label:"Studies",    tools:["fib"]},
+    {label:"Annotation", tools:["text"]},
   ];
 
   // Design A tool button — 36px wide, clean hover, 3px left accent bar
@@ -1896,6 +1954,26 @@ function TradingChart({ticker,stock,T=LIGHT,dark=false,alertsOpen=false,onAlerts
             </svg>
           </button>
 
+          {/* Magnet toggle */}
+          <button
+            onClick={()=>setMagnetMode(v=>!v)}
+            title={magnetMode?"Magnet: ON — snapping to candle OHLC":"Magnet: OFF — click to snap drawings to candles"}
+            style={{
+              width:"calc(100% - 10px)",height:30,border:"none",cursor:"pointer",
+              borderRadius:6,margin:"2px 5px",
+              background:magnetMode?T.accentLight:"transparent",
+              display:"flex",alignItems:"center",justifyContent:"center",
+              color:magnetMode?T.accent:"#64748B",
+              transition:"background 0.12s,color 0.12s",
+              outline:magnetMode?`1px solid ${T.accentBorder}`:"none",
+            }}
+            onMouseEnter={e=>{if(!magnetMode){e.currentTarget.style.background=T.bg;e.currentTarget.style.color=T.text;}}}
+            onMouseLeave={e=>{if(!magnetMode){e.currentTarget.style.background="transparent";e.currentTarget.style.color="#64748B";}}}>
+            <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" width="13" height="13">
+              <path d="M6 15a6 6 0 1 0 12 0V9"/><path d="M6 9V7a6 6 0 0 1 12 0v2"/><line x1="6" y1="9" x2="18" y2="9"/>
+            </svg>
+          </button>
+
         </div>
       </div>
 
@@ -2109,6 +2187,27 @@ function TradingChart({ticker,stock,T=LIGHT,dark=false,alertsOpen=false,onAlerts
             ))}
           </div>
 
+          {/* Floating text input when text tool is active */}
+          {textPlacing&&(
+            <div style={{position:"absolute",left:textPlacing.x,top:textPlacing.y,transform:"translate(-50%,-50%)",zIndex:500}}>
+              <input autoFocus value={textDraft} onChange={e=>setTextDraft(e.target.value)}
+                onKeyDown={e=>{
+                  if(e.key==="Enter"&&textDraft.trim()){
+                    pushHistory([...drawings,{type:"text",p1:{ci:textPlacing.ci,price:textPlacing.price},text:textDraft.trim(),col:"#F59E0B",id:Date.now()}]);
+                    setTextPlacing(null);setTextDraft("");
+                  }
+                  if(e.key==="Escape"){setTextPlacing(null);setTextDraft("");}
+                }}
+                onBlur={()=>{
+                  if(textDraft.trim())pushHistory([...drawings,{type:"text",p1:{ci:textPlacing.ci,price:textPlacing.price},text:textDraft.trim(),col:"#F59E0B",id:Date.now()}]);
+                  setTextPlacing(null);setTextDraft("");
+                }}
+                placeholder="Type note…"
+                style={{height:28,padding:"0 10px",borderRadius:6,border:"2px solid #F59E0B",background:T.surface,color:T.text,fontSize:12,fontFamily:T.ui,outline:"none",minWidth:120,boxShadow:"0 4px 12px rgba(0,0,0,0.2)"}}
+              />
+            </div>
+          )}
+
           {/* Active alerts badge — bottom right of chart */}
           {alerts.length>0&&(
             <div style={{position:"absolute",bottom:VH+MH+12,right:72,zIndex:100,display:"flex",flexDirection:"column",gap:4}}>
@@ -2207,48 +2306,6 @@ function TradingChart({ticker,stock,T=LIGHT,dark=false,alertsOpen=false,onAlerts
             </div>
           )}
 
-          {/* Resize handles — positioned absolutely, computed from panel heights */}
-          {(()=>{
-            const handles=[];
-            const totalH=VH_val+RH_val;
-            // Only show if at least one panel is active
-            if(totalH===0)return null;
-            // Each active panel gets a handle at its top edge (bottom of chart area)
-            const activePanels=[];
-            if(inds.vol) activePanels.push({key:"vol",h:VH_val});
-            if(inds.rsi) activePanels.push({key:"rsi",h:RH_val});
-            // Calculate bottom position of each panel's top edge
-            let bottomFromBottom=totalH;
-            activePanels.forEach(({key,h})=>{
-              const style={
-                position:"absolute",
-                bottom:bottomFromBottom,
-                left:0,right:64,
-                height:5,
-                cursor:"ns-resize",
-                zIndex:50,
-                display:"flex",
-                alignItems:"center",
-                justifyContent:"center",
-              };
-              handles.push(
-                <div key={key} style={style}
-                  onMouseDown={e=>onResizeStart(e,key)}
-                  onDoubleClick={()=>resetPanelSize(key)}
-                  title="Drag to resize · Double-click to reset"
-                  onMouseEnter={e=>{const bar=e.currentTarget.firstElementChild;if(bar){bar.style.background=T.accent;bar.style.width="56px";}}}
-                  onMouseLeave={e=>{const bar=e.currentTarget.firstElementChild;if(bar){bar.style.background=T.border;bar.style.width="32px";}}}>
-                  <div style={{
-                    width:32,height:3,borderRadius:2,
-                    background:T.border,
-                    transition:"background 0.15s, width 0.15s",
-                  }}/>
-                </div>
-              );
-              bottomFromBottom-=h+4;
-            });
-            return handles;
-          })()}
 
           {/* Selection toolbar — appears when a drawing is selected */}
           {selectedId!=null&&(()=>{
@@ -2457,6 +2514,26 @@ Provide detailed, insightful educational analysis (3–5 sentences). You may dis
             <p style={{fontSize:11,color:T.textMuted,margin:0,lineHeight:1.6}}>{summary}</p>
           </div>
 
+          {/* Starter prompt chips — shown when chat is empty */}
+          {msgs.length===0&&!loading&&(
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+              <div style={{fontSize:11,color:T.textMuted,fontWeight:500,marginBottom:2}}>Try asking:</div>
+              {[
+                `What is ${ticker} doing right now?`,
+                `Where is the key support and resistance?`,
+                `What does the RSI tell us here?`,
+                `Is the current trend bullish or bearish?`,
+              ].map(q=>(
+                <button key={q} onClick={()=>send(q)}
+                  style={{textAlign:"left",padding:"8px 12px",borderRadius:8,border:`1px solid ${T.border}`,background:T.bg,color:T.textMuted,fontSize:11,cursor:"pointer",fontFamily:T.ui,lineHeight:1.4,transition:"all 0.12s"}}
+                  onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.text;e.currentTarget.style.background=T.accentLight;}}
+                  onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background=T.bg;}}>
+                  {q}
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* Chat messages */}
           <div ref={chatRef} style={{display:"flex",flexDirection:"column",gap:8}}>
             {msgs.map((m,i)=>(
@@ -2656,6 +2733,7 @@ function Watchlist({ticker,setTicker,liveQuotes={},watchlistTickers=[],onAdd=()=
 // ─── BOTTOM TABS ──────────────────────────────────────────────────────────────
 function BottomTabs({ticker,stock,T=LIGHT,analysts=null}){
   const [tab,setTab]=useState("overview");
+  const [collapsed,setCollapsed]=useState(false);
   const lo=(stock.low??stock.price*0.97).toFixed(2);
   const hi=(stock.high??stock.price*1.013).toFixed(2);
   const open2=(stock.open??stock.price*0.998).toFixed(2);
@@ -2719,17 +2797,27 @@ function BottomTabs({ticker,stock,T=LIGHT,analysts=null}){
   return(
     <div style={{background:T.surface,borderTop:`1px solid ${T.border}`,flexShrink:0}}>
       {/* Tab bar */}
-      <div style={{display:"flex",alignItems:"stretch",height:36,borderBottom:`1px solid ${T.border}`,padding:"0 16px",gap:0,overflowX:"auto"}}>
+      <div style={{display:"flex",alignItems:"stretch",height:36,borderBottom:collapsed?"none":`1px solid ${T.border}`,padding:"0 8px 0 16px",gap:0,overflowX:"auto"}}>
         {TABS.map(([id,label])=>(
-          <button key={id} onClick={()=>setTab(id)}
-            style={{height:"100%",padding:"0 12px",background:"transparent",border:"none",borderBottom:tab===id?`2px solid ${T.accent}`:"2px solid transparent",fontSize:11,fontWeight:tab===id?600:400,color:tab===id?T.accent:T.textMuted,cursor:"pointer",marginBottom:-1,whiteSpace:"nowrap",letterSpacing:"-0.01em",transition:"color 0.1s"}}>
+          <button key={id} onClick={()=>{setTab(id);if(collapsed)setCollapsed(false);}}
+            style={{height:"100%",padding:"0 12px",background:"transparent",border:"none",borderBottom:tab===id&&!collapsed?`2px solid ${T.accent}`:"2px solid transparent",fontSize:11,fontWeight:tab===id?600:400,color:tab===id?T.accent:T.textMuted,cursor:"pointer",marginBottom:-1,whiteSpace:"nowrap",letterSpacing:"-0.01em",transition:"color 0.1s"}}>
             {label}
           </button>
         ))}
+        <div style={{flex:1}}/>
+        {/* Collapse / expand the analysis panel */}
+        <button onClick={()=>setCollapsed(v=>!v)} title={collapsed?"Expand analysis panel":"Shrink — collapse analysis panel"}
+          style={{height:"100%",padding:"0 10px",background:"transparent",border:"none",cursor:"pointer",color:T.textMuted,display:"flex",alignItems:"center",flexShrink:0}}
+          onMouseEnter={e=>e.currentTarget.style.color=T.text}
+          onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>
+          <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            {collapsed?<polyline points="18 15 12 9 6 15"/>:<polyline points="6 9 12 15 18 9"/>}
+          </svg>
+        </button>
       </div>
 
       {/* Overview content */}
-      {tab==="overview"&&(
+      {!collapsed&&tab==="overview"&&(
         <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr) 1.8fr 1.8fr",padding:"10px 20px 12px",gap:"0 12px"}}>
           {[
             {label:"Open",         val:open2,           col:T.text},
@@ -2770,7 +2858,7 @@ function BottomTabs({ticker,stock,T=LIGHT,analysts=null}){
       )}
 
       {/* Financials tab */}
-      {tab==="financials"&&(
+      {!collapsed&&tab==="financials"&&(
         <div style={{padding:"12px 20px 16px"}}>
           <div style={{overflowX:"auto"}}>
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:380}}>
@@ -2793,12 +2881,15 @@ function BottomTabs({ticker,stock,T=LIGHT,analysts=null}){
               </tbody>
             </table>
           </div>
-          <p style={{fontSize:10,color:T.textMuted,marginTop:10,marginBottom:0,lineHeight:1.5}}>Figures estimated from available market data. Verify with official SEC filings.</p>
+          <div style={{display:"flex",alignItems:"flex-start",gap:8,marginTop:12,padding:"10px 12px",borderRadius:8,background:T.bg,border:`1px solid ${T.border}`}}>
+            <svg width="13" height="13" fill="none" stroke="#D97706" strokeWidth="2" viewBox="0 0 24 24" style={{flexShrink:0,marginTop:1}}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <p style={{fontSize:11,color:T.textMuted,margin:0,lineHeight:1.55}}><strong style={{color:T.text}}>Estimated data.</strong> Figures are derived from publicly available market data and may differ from official reports. Always verify with company SEC filings or your brokerage.</p>
+          </div>
         </div>
       )}
 
       {/* Metrics tab */}
-      {tab==="metrics"&&(
+      {!collapsed&&tab==="metrics"&&(
         <div style={{padding:"12px 20px 16px"}}>
           <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:"8px 10px"}}>
             {metricRows.map(([label,val])=>(
@@ -2812,7 +2903,7 @@ function BottomTabs({ticker,stock,T=LIGHT,analysts=null}){
       )}
 
       {/* Earnings tab */}
-      {tab==="earnings"&&(
+      {!collapsed&&tab==="earnings"&&(
         <div style={{padding:"12px 20px 16px"}}>
           <div style={{overflowX:"auto"}}>
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:320}}>
@@ -2845,12 +2936,15 @@ function BottomTabs({ticker,stock,T=LIGHT,analysts=null}){
               <div style={{fontSize:14,fontWeight:700,color:T.text,fontFamily:"monospace"}}>{nextEpsEst}</div>
             </div>
           </div>
-          <p style={{fontSize:10,color:T.textMuted,marginTop:8,marginBottom:0,lineHeight:1.5}}>Historical EPS and estimates are approximated from available market data. Verify with official filings.</p>
+          <div style={{display:"flex",alignItems:"flex-start",gap:8,marginTop:12,padding:"10px 12px",borderRadius:8,background:T.bg,border:`1px solid ${T.border}`}}>
+            <svg width="13" height="13" fill="none" stroke="#D97706" strokeWidth="2" viewBox="0 0 24 24" style={{flexShrink:0,marginTop:1}}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <p style={{fontSize:11,color:T.textMuted,margin:0,lineHeight:1.55}}><strong style={{color:T.text}}>Estimated data.</strong> EPS figures and forward estimates are approximated. Always verify with official company reports or SEC filings before making any decisions.</p>
+          </div>
         </div>
       )}
 
       {/* Dividends tab */}
-      {tab==="dividends"&&(
+      {!collapsed&&tab==="dividends"&&(
         <div style={{padding:"12px 20px 16px"}}>
           {divData?(
             <>
@@ -2894,7 +2988,7 @@ function BottomTabs({ticker,stock,T=LIGHT,analysts=null}){
       )}
 
       {/* Analyst Estimates tab */}
-      {tab==="estimates"&&(
+      {!collapsed&&tab==="estimates"&&(
         <div style={{padding:"12px 20px 16px"}}>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
             <div style={{background:T.bg,borderRadius:10,padding:"14px 16px",border:`1px solid ${T.border}`}}>
@@ -2951,6 +3045,56 @@ const MARKET_INDICES=[
   {label:"NASDAQ", symbol:"^IXIC"},
   {label:"DOW",    symbol:"^DJI"},
 ];
+
+// ─── ONBOARDING MODAL ────────────────────────────────────────────────────────
+function OnboardingModal({T=LIGHT,onClose}){
+  const steps=[
+    {num:"01",col:"#2563EB",title:"Add any stock to your watchlist",body:"Click + in the watchlist or search any ticker in the top bar. Track US stocks, ETFs — anything on Yahoo Finance.",icon:<svg width="22" height="22" fill="none" stroke="#2563EB" strokeWidth="1.75" viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h6"/><line x1="20" y1="14" x2="20" y2="20"/><line x1="17" y1="17" x2="23" y2="17"/></svg>},
+    {num:"02",col:"#16A34A",title:"Open a chart and explore",body:"Click any stock to see its live chart. Switch timeframes, draw trend lines, Fibonacci levels, and set price alerts — all in one place.",icon:<svg width="22" height="22" fill="none" stroke="#16A34A" strokeWidth="1.75" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>},
+    {num:"03",col:"#D97706",title:"Ask the AI anything — in plain English",body:"Open the right panel and ask questions about any chart. \"Is this bullish?\" \"What does RSI mean here?\" Real answers, no jargon.",icon:<svg width="22" height="22" fill="none" stroke="#D97706" strokeWidth="1.75" viewBox="0 0 24 24"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.46 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.46 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z"/></svg>},
+  ];
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:10000,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{background:T.surface,borderRadius:16,width:"min(540px,94vw)",boxShadow:"0 32px 80px rgba(0,0,0,0.35)",overflow:"hidden"}}>
+        {/* Header */}
+        <div style={{padding:"28px 32px 20px",borderBottom:`1px solid ${T.border}`}}>
+          <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:6}}>
+            <div style={{width:36,height:36,background:"#2563EB",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+              <svg width="36" height="36" viewBox="0 0 48 48" fill="none"><polyline points="8,16 16,32 24,20 32,32 40,12" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/><circle cx="40" cy="12" r="3" fill="white"/></svg>
+            </div>
+            <div>
+              <div style={{fontSize:20,fontWeight:800,color:T.text,letterSpacing:"-0.03em"}}>Welcome to ChartWiz</div>
+              <div style={{fontSize:13,color:T.textMuted}}>Get up and running in 3 steps</div>
+            </div>
+          </div>
+        </div>
+        {/* Steps */}
+        <div style={{padding:"20px 32px",display:"flex",flexDirection:"column",gap:16}}>
+          {steps.map(s=>(
+            <div key={s.num} style={{display:"flex",gap:16,alignItems:"flex-start",padding:"14px 16px",borderRadius:10,background:T.bg,border:`1px solid ${T.border}`}}>
+              <div style={{width:44,height:44,borderRadius:10,background:`${s.col}15`,border:`1px solid ${s.col}30`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,color:s.col}}>{s.icon}</div>
+              <div>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                  <span style={{fontSize:10,fontWeight:700,color:s.col,letterSpacing:"0.06em"}}>{s.num}</span>
+                  <span style={{fontSize:13,fontWeight:700,color:T.text}}>{s.title}</span>
+                </div>
+                <p style={{fontSize:12,color:T.textMuted,lineHeight:1.6,margin:0}}>{s.body}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+        {/* Footer */}
+        <div style={{padding:"0 32px 28px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <p style={{fontSize:11,color:T.textMuted,margin:0}}>Press <kbd style={{background:T.bg,border:`1px solid ${T.border}`,borderRadius:4,padding:"1px 5px",fontFamily:"monospace",fontSize:10}}>?</kbd> anytime to see keyboard shortcuts</p>
+          <button onClick={onClose}
+            style={{height:40,padding:"0 28px",borderRadius:10,border:"none",background:"#2563EB",color:"#fff",fontSize:14,fontWeight:700,cursor:"pointer",letterSpacing:"-0.01em"}}>
+            Let's go →
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function MarketBar({T=LIGHT}){
   const [quotes,setQuotes]=useState({});
@@ -3021,6 +3165,7 @@ function ScannerPage({T,dark,onSelect,isPremium=false}){
   const [progress,setProgress]=useState(0);
   const [scanned,setScanned]=useState(false);
   const [scanBlocked,setScanBlocked]=useState(false);
+  const [scanningTicker,setScanningTicker]=useState("");
 
   const canScan=()=>{
     if(isPremium)return true;
@@ -3164,6 +3309,7 @@ function ScannerPage({T,dark,onSelect,isPremium=false}){
       // Fetch real 1-year daily bars for every ticker in parallel batches
       for(let i=0;i<tickers.length;i+=CONCURRENCY){
         const batch=tickers.slice(i,i+CONCURRENCY);
+        setScanningTicker(`${SCAN_UNIVERSE[batch[0]]?.name||batch[0]}`);
         const batchResults=await Promise.all(
           batch.map(async tk=>{
             try{
@@ -3205,7 +3351,9 @@ function ScannerPage({T,dark,onSelect,isPremium=false}){
           <div>
             <div style={{fontSize:20,fontWeight:700,color:T.text,letterSpacing:"-0.02em",marginBottom:3}}>Market Scanner</div>
             <div style={{fontSize:12,color:T.textMuted}}>
-              {scanned?`Scanned ${results.total} stocks · top 10 per category shown`:`${Object.keys(SCAN_UNIVERSE).length} stocks · real market data · RSI, EMA, BB, Supertrend`}
+              {scanning&&scanningTicker
+                ?<span>Analyzing <strong style={{color:T.text}}>{scanningTicker}</strong>… {progress}% complete</span>
+                :scanned?`Scanned ${results.total} stocks · top 10 per category shown`:`${Object.keys(SCAN_UNIVERSE).length} stocks · real market data · RSI, EMA, BB, Supertrend`}
             </div>
             {!isPremium&&<div style={{fontSize:11,color:T.textMuted,marginTop:3}}>Free: 1 scan per week · <span style={{color:T.accent,cursor:"pointer"}}>Upgrade for unlimited</span></div>}
           </div>
@@ -3333,7 +3481,18 @@ function ChartWizInner(){
   const [liveQuotes,setLiveQuotes]=useState({});
   const [analystData,setAnalystData]=useState({});
   const [chartAlertsOpen,setChartAlertsOpen]=useState(false);
-  const [isWinMaximized,setIsWinMaximized]=useState(false); // { [ticker]: {buy,hold,sell,buyPct,holdPct,sellPct,rating} }
+  const [isWinMaximized,setIsWinMaximized]=useState(false);
+  const [showOnboarding,setShowOnboarding]=useState(()=>!localStorage.getItem("chartwiz-onboarded"));
+  const [showShortcuts,setShowShortcuts]=useState(false);
+  useEffect(()=>{
+    const h=e=>{
+      if(e.target.tagName==="INPUT"||e.target.tagName==="TEXTAREA")return;
+      if(e.key==="?"||e.key==="/")setShowShortcuts(v=>!v);
+      if(e.key==="Escape"){setShowShortcuts(false);}
+    };
+    window.addEventListener("keydown",h);
+    return()=>window.removeEventListener("keydown",h);
+  },[]); // { [ticker]: {buy,hold,sell,buyPct,holdPct,sellPct,rating} }
   const [watchlistTickers,setWatchlistTickers]=useState(Object.keys(STOCKS));
   const watchlistRef=useRef(Object.keys(STOCKS)); // ref so fetchAll loop sees updates
   const [isPremium,setIsPremium]=useState(DEV_MODE);
@@ -3358,6 +3517,11 @@ function ChartWizInner(){
       if(s.anthropicKey)setAnthropicKey(s.anthropicKey);
       if(s.userName)setUserName(s.userName);
       if(s.userEmail)setUserEmail(s.userEmail);
+      if(Array.isArray(s.watchlist)&&s.watchlist.length>0){
+        watchlistRef.current=s.watchlist;
+        setWatchlistTickers(s.watchlist);
+        setTicker(s.watchlist[0]);
+      }
     }).catch(()=>{});
   },[]);
 
@@ -3381,14 +3545,13 @@ function ChartWizInner(){
     const tk=sym.toUpperCase().trim();
     if(!tk)return;
     if(!watchlistRef.current.includes(tk)){
-      if(!isPremium && watchlistRef.current.length >= FREE_WATCHLIST_LIMIT){
-        setShowSettings(true); // nudge to upgrade
-        return;
-      }
       const next=[...watchlistRef.current,tk];
       watchlistRef.current=next;
       setWatchlistTickers(next);
-      if(inElectron())fetchYahooQuote(tk).then(q=>{if(q)setLiveQuotes(p=>({...p,[tk]:q}));}).catch(()=>{});
+      if(inElectron()){
+        fetchYahooQuote(tk).then(q=>{if(q)setLiveQuotes(p=>({...p,[tk]:q}));}).catch(()=>{});
+        window.chartWizAPI.setSettings({watchlist:next}).catch(()=>{});
+      }
     }
     setTicker(tk);
   };
@@ -3398,6 +3561,7 @@ function ChartWizInner(){
     watchlistRef.current=next;
     setWatchlistTickers(next);
     if(ticker===tk&&next.length>0)setTicker(next[0]);
+    if(inElectron())window.chartWizAPI.setSettings({watchlist:next}).catch(()=>{});
   };
 
   // Merge static stock data with live quote, deriving real trend/momentum/levels
@@ -3633,8 +3797,8 @@ function ChartWizInner(){
 
       {/* BODY */}
       <div style={{flex:1,overflow:"hidden",minHeight:0,background:dark?"#0A0D12":"#F0F2F5",padding:8}}>
-        {page==="chart"&&(
-          <div style={{display:"flex",height:"100%",gap:8,position:"relative"}}>
+        {/* Chart and Scanner are always mounted — CSS show/hide preserves scanner results */}
+        <div style={{display:page==="chart"?"flex":"none",height:"100%",gap:8,position:"relative"}}>
 
             {/* Icon sidebar */}
             <div style={{width:52,flexShrink:0,borderRadius:14,background:T.surface,border:`1px solid ${T.border}`,display:"flex",flexDirection:"column",alignItems:"center",paddingTop:8,gap:2,overflow:"hidden"}}>
@@ -3721,15 +3885,53 @@ function ChartWizInner(){
               <MarketSnapshot ticker={ticker} stock={stock} T={T} dark={dark} isPremium={isPremium} onUpgrade={()=>setShowSettings(true)} analysts={analystData[ticker]}/>
             </div>
           </div>
-        )}
-        {page==="scanner"&&(
-          <div style={{borderRadius:14,overflow:"hidden",height:"100%",border:`1px solid ${T.border}`}}>
-            <ScannerPage T={T} dark={dark} isPremium={isPremium} onSelect={tk=>{setTicker(tk);setPage("chart");}}/>
-          </div>
-        )}
-      </div>
+        </div>
+        <div style={{display:page==="scanner"?"block":"none",borderRadius:14,overflow:"hidden",height:"100%",border:`1px solid ${T.border}`}}>
+          <ScannerPage T={T} dark={dark} isPremium={isPremium} onSelect={tk=>{setTicker(tk);setPage("chart");}}/>
+        </div>
 
       <MarketBar T={T}/>
+
+      {/* ── Onboarding modal — first launch only ── */}
+      {showOnboarding&&<OnboardingModal T={T} onClose={()=>{setShowOnboarding(false);localStorage.setItem("chartwiz-onboarded","1");}}/>}
+
+      {/* ── Keyboard shortcuts modal ── */}
+      {showShortcuts&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:10000,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>setShowShortcuts(false)}>
+          <div style={{background:T.surface,borderRadius:14,width:"min(440px,94vw)",boxShadow:"0 24px 60px rgba(0,0,0,0.3)",overflow:"hidden"}} onClick={e=>e.stopPropagation()}>
+            <div style={{padding:"20px 24px 16px",borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{fontSize:15,fontWeight:700,color:T.text}}>Keyboard Shortcuts</span>
+              <button onClick={()=>setShowShortcuts(false)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:18}}>×</button>
+            </div>
+            <div style={{padding:"12px 24px 24px",display:"flex",flexDirection:"column",gap:2}}>
+              {[
+                ["Chart Navigation",""],
+                ["Scroll","Zoom in / out"],
+                ["Click + drag","Pan chart"],
+                ["",""],
+                ["Drawing Tools",""],
+                ["Ctrl/Cmd + Z","Undo"],
+                ["Ctrl/Cmd + Shift + Z","Redo"],
+                ["Delete / Backspace","Delete selected drawing"],
+                ["Escape","Deselect / cancel text input"],
+                ["",""],
+                ["General",""],
+                ["?","Show / hide this panel"],
+                ["Ctrl/Cmd + ,","Open settings"],
+              ].map(([key,desc],i)=>{
+                if(!key&&!desc)return <div key={i} style={{height:8}}/>;
+                if(!desc)return <div key={i} style={{fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:"0.06em",textTransform:"uppercase",padding:"8px 0 4px"}}>{key}</div>;
+                return(
+                  <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 8px",borderRadius:6,background:T.bg}}>
+                    <span style={{fontSize:12,color:T.textMuted}}>{desc}</span>
+                    <kbd style={{fontSize:11,fontWeight:600,color:T.text,background:T.surface,border:`1px solid ${T.border}`,borderRadius:5,padding:"2px 8px",fontFamily:"monospace"}}>{key}</kbd>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Settings / Profile full-page modal ── */}
       {showSettings&&(
